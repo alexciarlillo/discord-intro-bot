@@ -25,19 +25,20 @@ client.on('ready', () => {
 client.on('message', msg => {
   if (!msg.guild) return;
 
-  if (msg.mentions.users.find(user => userUniqueName(user) === userUniqueName(client.user))) {
-    msg.reply(usage);
+  if(isBotMention(client, msg)) {
+    replyWithUsage();
     return;
   }
 
-  if (!msg.content.startsWith(commandPrefix)) return;
-
-  if (msg.content === '!intro help') {
-    msg.reply(usage);
-  }
+  if(noCommandPrefix(msg, commandPrefix)) return;
 
   const args = msg.content.slice(commandPrefix.length).trim().split(/ +/g);
   const command = args.shift().toLowerCase();
+
+  if (command === 'help') {
+    replyWithUsage();
+    return;
+  }
 
   if(command === 'set') {
     let url = args[0];
@@ -77,20 +78,18 @@ client.on('message', msg => {
     
     setUserIntro(authorName, {url: url, seek: seek, duration: duration})
       .then(() => {
-        console.log(`Set user intro data for ${authorName}`);
         msg.reply(`**Intro music set!** Source: ${url} | Offset: ${seek}s | Duration: ${duration}s`);
       })
       .catch(err => console.error(err));
 
-  }
+    return;
+  }  
 });
 
 client.on('voiceStateUpdate', (oldMember, newMember) => {
   const userName = userUniqueName(newMember.user);
   if (userName === userUniqueName(client.user))  return;
   if (!newMember.voiceChannel) return;
-
-  console.log('User: ' + userName + ' joined channel: ' + newMember.voiceChannel.name);
 
   newMember.voiceChannel.join()
     .then(connection => { 
@@ -147,6 +146,18 @@ setUserIntro = async (userName, userIntro) => {
   } catch (err) {
     throw err;
   }
+}
+
+isBotMessage = (client, msg) => {
+  return msg.mentions.users.find(user => userUniqueName(user) === userUniqueName(client.user))
+}
+
+replyWithUsage = () => {
+  msg.reply(usage);
+}
+
+noCommandPrefix = (msg, prefix) => {
+  return !msg.content.startsWith(prefix);
 }
 
 const usage = [
