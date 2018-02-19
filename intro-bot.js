@@ -131,6 +131,8 @@ getUserIntro = async (userName) => {
 
     return {url, seek, duration};
   } catch (err) {
+    if (err.notFound)
+      return {url: process.env.DEFAULT_STREAM_URL, seek: process.env.DEFAULT_SEEK, duration: process.env.DEFAULT_DURATION};
     throw err;
   }
 }
