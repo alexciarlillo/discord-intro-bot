@@ -95,7 +95,6 @@ client.on('voiceStateUpdate', (oldMember, newMember) => {
     .then(connection => { 
       getUserIntro(userName)
         .then((userIntro) => {
-          console.log(util.inspect(userIntro, {depth: null}));
           const stream = ytdl(userIntro.url, { filter: 'audioonly' });
           const dispatcher = connection.playStream(stream, { volume: 0.75, seek: userIntro.seek });
 
@@ -130,7 +129,7 @@ getUserIntro = async (userName) => {
     const seek = await db.get(`${userName}.seek`);
     const duration = await db.get(`${userName}.duration`);
 
-    return {url: url, seek: seek, duration: duration};
+    return {url, seek, duration};
   } catch (err) {
     throw err;
   }
