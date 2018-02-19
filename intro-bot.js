@@ -1,10 +1,22 @@
 const Discord = require('discord.js');
 const ytdl = require('ytdl-core');
 const dotenv = require('dotenv');
-const fs = require('fs');
+const level = require('level');
+const util = require('util');
 
 const client = new Discord.Client();
 dotenv.load();
+
+const commandPrefix = process.env.COMMAND_PREFIX;
+let activeStreams = [];
+
+const db = level(process.env.DB_LOCATION, {}, (error, db) => {
+  if(error) {
+    console.error(error);
+    process.exit(1);
+  }
+});
+
 
 client.on('ready', () => {
     console.log(`Logged in as ${client.user.tag}!`);
@@ -12,31 +24,136 @@ client.on('ready', () => {
 
 client.on('message', msg => {
   if (!msg.guild) return;
-	
 
-  if (msg.content === '!join') {
-    // Only try to join the sender's voice channel if they are in one themselves
-    if (msg.member.voiceChannel) {
-      msg.member.voiceChannel.join()
-        .then(connection => { // Connection is an instance of VoiceConnection
-          msg.reply('I have successfully connected to the channel!');
-        })
-        .catch(console.log);
-    } else {
-      msg.reply('You need to join a voice channel first!');
-    }
+  if (msg.mentions.users.find(user => userUniqueName(user) === userUniqueName(client.user))) {
+    msg.reply(usage);
+    return;
   }
 
-    if(msg.content === '!play') {
-        msg.reply('Playing Test MP3...');
-        const stream = ytdl('https://youtu.be/9jK-NcRmVcw', { filter: 'audioonly' });
-        client.voiceConnections.first().playFile('./test.mp3', {volume: 0.5});
+  if (!msg.content.startsWith(commandPrefix)) return;
+
+  if (msg.content === '!intro help') {
+    msg.reply(usage);
+  }
+
+  const args = msg.content.slice(commandPrefix.length).trim().split(/ +/g);
+  const command = args.shift().toLowerCase();
+
+  if(command === 'set') {
+    let url = args[0];
+    let seek = parseInt(args[1]);
+    let duration = parseInt(args[2]);
+    let authorName = userUniqueName(msg.author);
+
+    if (! (url.startsWith('http:') || url.startsWith('https:')) ) {
+      msg.reply('Invalid URL. URLs must start with http or https');
+      return;
     }
 
-    if(msg.content === '!stop') {
-        msg.reply('Stopping playback.');
-        client.voiceConnections.first().dispatcher.end();
+    if (! (url.startsWith('https://youtu.be/') || url.startsWith('https://www.youtube.com/')) ) {
+      msg.reply('Only YouTube URLs are support at this time.');
+      return;
     }
+
+    if (seek == NaN) {
+      msg.reply('Invalid offset time. Not a number.');
+      return;
+    }
+
+    if (seek > 300) {
+      msg.reply('Invalid offset time. Exceeds maximum value.');
+      return;
+    }
+
+    if (duration == NaN) {
+      msg.reply('Invalid duration time. Not a number.');
+      return;
+    }
+
+    if (duration > 30) {
+      msg.reply('Invalid duration time. Exceeds maximum value.');
+      return;
+    }
+    
+    setUserIntro(authorName, {url: url, seek: seek, duration: duration})
+      .then(() => {
+        console.log(`Set user intro data for ${authorName}`);
+        msg.reply(`**Intro music set!** Source: ${url} | Offset: ${seek}s | Duration: ${duration}s`);
+      })
+      .catch(err => console.error(err));
+
+  }
 });
 
+client.on('voiceStateUpdate', (oldMember, newMember) => {
+  const userName = userUniqueName(newMember.user);
+  if (userName === userUniqueName(client.user))  return;
+  if (!newMember.voiceChannel) return;
+
+  console.log('User: ' + userName + ' joined channel: ' + newMember.voiceChannel.name);
+
+  newMember.voiceChannel.join()
+    .then(connection => { 
+      getUserIntro(userName)
+        .then((userIntro) => {
+          console.log(util.inspect(userIntro, {depth: null}));
+          const stream = ytdl(userIntro.url, { filter: 'audioonly' });
+          const dispatcher = connection.playStream(stream, { volume: 0.75, seek: userIntro.seek });
+
+          activeStreams.push({ dispatcher: dispatcher, duration: userIntro.duration});
+        })
+        .catch(err => {
+          console.error(err);
+        });
+      
+    })
+    .catch(console.log);
+  
+});
+
+client.setInterval(() => {
+  activeStreams.forEach(stream => {
+    if (stream.duration * 1000 <= stream.dispatcher.time) {
+      stream.dispatcher.end();
+    }
+  });
+}, process.env.DISPATCHER_CHECK_INTERVAL * 1000);
+
 client.login(process.env.DISCORD_BOT_KEY);
+
+userUniqueName = user => {
+  return user.username + '#' + user.discriminator;
+}
+
+getUserIntro = async (userName) => {
+  try {
+    const url = await db.get(`${userName}.url`);
+    const seek = await db.get(`${userName}.seek`);
+    const duration = await db.get(`${userName}.duration`);
+
+    return {url: url, seek: seek, duration: duration};
+  } catch (err) {
+    throw err;
+  }
+}
+
+setUserIntro = async (userName, userIntro) => {
+  try {
+    await db.put(`${userName}.url`, userIntro.url);
+    await db.put(`${userName}.seek`, userIntro.seek);
+    await db.put(`${userName}.duration`, userIntro.duration);
+
+    return true;
+  } catch (err) {
+    throw err;
+  }
+}
+
+const usage = [
+  "**__Intro Bot Help__**",
+  `*Command Prefix:* ${commandPrefix}`, "",
+  `**${commandPrefix} help**`,
+  "*Displays this help text.*", "",
+  `**${commandPrefix} set [url] [offset] [duration]**`, 
+  "*Sets introduction stream URL, time offset in seconds, and playback duration in seconds (max. 30)*"
+];
