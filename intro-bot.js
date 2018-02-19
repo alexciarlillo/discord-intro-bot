@@ -25,7 +25,7 @@ client.on('ready', () => {
 client.on('message', msg => {
   if (!msg.guild) return;
 
-  if(isBotMention(client, msg)) {
+  if (isBotMention(client, msg)) {
     replyWithUsage();
     return;
   }
@@ -149,7 +149,7 @@ setUserIntro = async (userName, userIntro) => {
   }
 }
 
-isBotMessage = (client, msg) => {
+isBotMention = (client, msg) => {
   return msg.mentions.users.find(user => userUniqueName(user) === userUniqueName(client.user))
 }
 
