@@ -98,7 +98,7 @@ client.on('voiceStateUpdate', (oldMember, newMember) => {
           const stream = ytdl(userIntro.url, { filter: 'audioonly' });
           const dispatcher = connection.playStream(stream, { volume: 0.75, seek: userIntro.seek });
 
-          activeStreams.push({ dispatcher: dispatcher, duration: userIntro.duration});
+          activeStreams.push({user: userName, dispatcher: dispatcher, duration: userIntro.duration, status: 'playing'});
         })
         .catch(err => {
           console.error(err);
@@ -111,9 +111,14 @@ client.on('voiceStateUpdate', (oldMember, newMember) => {
 
 client.setInterval(() => {
   activeStreams.forEach(stream => {
-    if (stream.duration * 1000 <= stream.dispatcher.time) {
+    if (stream.status === 'playing' && stream.duration * 1000 <= stream.dispatcher.time) {
       stream.dispatcher.end();
+      stream.status = 'ended';
     }
+  });
+
+  activeStreams = activeStreams.filter(stream => {
+    stream.status === 'playing';
   });
 }, process.env.DISPATCHER_CHECK_INTERVAL * 1000);
 
