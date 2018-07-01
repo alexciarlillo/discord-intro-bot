@@ -3,12 +3,12 @@ const ytdl = require('ytdl-core');
 const dotenv = require('dotenv');
 const level = require('level');
 const util = require('util');
+const fs = require('fs');
 
 const client = new Discord.Client();
 dotenv.load();
 
 const commandPrefix = process.env.COMMAND_PREFIX;
-let activeStreams = [];
 
 const db = level(process.env.DB_LOCATION, {}, (error, db) => {
   if(error) {
@@ -56,31 +56,34 @@ client.on('message', msg => {
       return;
     }
 
-    if (seek == NaN) {
-      msg.reply('Invalid offset time. Not a number.');
+    if (seek == NaN || seek < 0 || seek > 300) {
+      msg.reply('Invalid offset time.');
       return;
     }
 
-    if (seek > 300) {
-      msg.reply('Invalid offset time. Exceeds maximum value.');
+    if (duration == NaN || duration <= 0 || duration > 30) {
+      msg.reply('Invalid duration time.');
       return;
     }
 
-    if (duration == NaN) {
-      msg.reply('Invalid duration time. Not a number.');
-      return;
-    }
-
-    if (duration > 30) {
-      msg.reply('Invalid duration time. Exceeds maximum value.');
-      return;
-    }
-    
-    setUserIntro(authorName, {url: url, seek: seek, duration: duration})
-      .then(() => {
-        msg.reply(`**Intro music set!** Source: ${url} | Offset: ${seek}s | Duration: ${duration}s`);
-      })
-      .catch(err => console.error(err));
+    ytdl.getInfo(url)
+        .then((info) => {
+            if (info.length_seconds > 600) {
+                throw new Error("Source too long (max 10 minutes).");
+            }
+        }).then( () => {
+           let stream = ytdl(url, { filter: (format) => format.container === 'm4a' })
+                        .pipe(fs.createWriteStream(authorName + '.m4a'));
+        
+           stream.on('finish', () => {
+                setUserIntro(authorName, {url: url, seek: seek, duration: duration})
+                .then( () => {
+                    msg.reply(`**Intro music set!** Source: ${url} | Offset: ${seek}s | Duration: ${duration}s`);
+                });
+           });
+        }).catch(err => {
+            msg.reply(`!! ERROR !!: ${err}`)
+        });
 
     return;
   }  
@@ -92,35 +95,28 @@ client.on('voiceStateUpdate', (oldMember, newMember) => {
   if (!newMember.voiceChannel) return;
 
   newMember.voiceChannel.join()
-    .then(connection => { 
-      getUserIntro(userName)
-        .then((userIntro) => {
-          const stream = ytdl(userIntro.url, { filter: 'audioonly' });
-          const dispatcher = connection.playStream(stream, { volume: 0.75, seek: userIntro.seek });
+    .then(connection => {
+        if (connection.speaking)
+            return;
 
-          activeStreams.push({user: userName, dispatcher: dispatcher, duration: userIntro.duration, status: 'playing'});
-        })
-        .catch(err => {
-          console.error(err);
-        });
-      
+        getUserIntro(userName)
+            .then((userIntro) => {
+                if (userIntro && fs.existsSync(userName + '.m4a')) {
+                    const dispatcher = connection.playFile(userName + '.m4a', { volume: 0.75, seek: userIntro.seek });
+
+                    setTimeout(() => {
+                        dispatcher.end();
+                    }, userIntro.duration * 1000);
+                    
+                    dispatcher.on('end', () => {
+                        newMember.voiceChannel.leave();
+                    });
+                }
+            })
     })
-    .catch(console.log);
+    .catch(console.error);
   
 });
-
-client.setInterval(() => {
-  activeStreams.forEach(stream => {
-    if (stream.status === 'playing' && stream.duration * 1000 <= stream.dispatcher.time) {
-      stream.dispatcher.end();
-      stream.status = 'ended';
-    }
-  });
-
-  activeStreams = activeStreams.filter(stream => {
-    return stream.status === 'playing';
-  });
-}, process.env.DISPATCHER_CHECK_INTERVAL * 1000);
 
 client.login(process.env.DISCORD_BOT_KEY);
 
@@ -137,7 +133,7 @@ getUserIntro = async (userName) => {
     return {url, seek, duration};
   } catch (err) {
     if (err.notFound)
-      return {url: process.env.DEFAULT_STREAM_URL, seek: process.env.DEFAULT_SEEK, duration: process.env.DEFAULT_DURATION};
+      return false;
     throw err;
   }
 }
@@ -174,3 +170,5 @@ const usage = [
   `**${commandPrefix} set [url] [offset] [duration]**`, 
   "*Sets introduction stream URL, time offset in seconds, and playback duration in seconds (max. 30)*"
 ];
+
+
