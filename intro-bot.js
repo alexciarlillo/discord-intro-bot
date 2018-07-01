@@ -26,7 +26,7 @@ client.on('message', msg => {
   if (!msg.guild) return;
 
   if (isBotMention(client, msg)) {
-    replyWithUsage();
+    replyWithUsage(msg);
     return;
   }
 
@@ -36,7 +36,7 @@ client.on('message', msg => {
   const command = args.shift().toLowerCase();
 
   if (command === 'help') {
-    replyWithUsage();
+    replyWithUsage(msg);
     return;
   }
 
@@ -118,7 +118,7 @@ client.setInterval(() => {
   });
 
   activeStreams = activeStreams.filter(stream => {
-    stream.status === 'playing';
+    return stream.status === 'playing';
   });
 }, process.env.DISPATCHER_CHECK_INTERVAL * 1000);
 
@@ -158,7 +158,7 @@ isBotMention = (client, msg) => {
   return msg.mentions.users.find(user => userUniqueName(user) === userUniqueName(client.user))
 }
 
-replyWithUsage = () => {
+replyWithUsage = (msg) => {
   msg.reply(usage);
 }
 
