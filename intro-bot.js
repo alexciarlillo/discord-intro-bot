@@ -9,6 +9,7 @@ const client = new Discord.Client();
 dotenv.load();
 
 const commandPrefix = process.env.COMMAND_PREFIX;
+const ignoreChannels = process.env.IGNORE_CHANNELS.split(',');
 
 const db = level(process.env.DB_LOCATION, {}, (error, db) => {
   if(error) {
@@ -91,10 +92,14 @@ client.on('message', msg => {
 
 client.on('voiceStateUpdate', (oldMember, newMember) => {
   const userName = userUniqueName(newMember.user);
+  const channel = newMember.voiceChannel;
   if (userName === userUniqueName(client.user))  return;
-  if (!newMember.voiceChannel) return;
+  if (!channel) return;
+  if (ignoreChannels.includes(channel.name)) return;
 
-  newMember.voiceChannel.join()
+  console.info(`${userName} joined ${channel.name}`);
+
+  channel.join()
     .then(connection => {
         if (connection.speaking)
             return;
@@ -102,6 +107,7 @@ client.on('voiceStateUpdate', (oldMember, newMember) => {
         getUserIntro(userName)
             .then((userIntro) => {
                 if (userIntro && fs.existsSync(userName + '.m4a')) {
+                    console.info(`${userName} intro found. Playing intro.`);
                     const dispatcher = connection.playFile(userName + '.m4a', { volume: 0.75, seek: userIntro.seek });
 
                     setTimeout(() => {
@@ -109,8 +115,11 @@ client.on('voiceStateUpdate', (oldMember, newMember) => {
                     }, userIntro.duration * 1000);
                     
                     dispatcher.on('end', () => {
-                        newMember.voiceChannel.leave();
+                        console.info(`${userName} playback complete. Disconnecting.`);
+                        connection.disconnect();
                     });
+                } else {
+                    console.info(`${userName} no intro file found.`);
                 }
             })
     })
