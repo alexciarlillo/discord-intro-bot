@@ -72,7 +72,8 @@ client.on('message', msg => {
             if (info.length_seconds > 600) {
                 throw new Error("Source too long (max 10 minutes).");
             }
-            resolve(info);
+            
+            return info;
         }).then((info) => {
            let stream = ytdl(url, { filter: (format) => format.container === 'm4a' })
                         .pipe(fs.createWriteStream(authorName + '.m4a'));
