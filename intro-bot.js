@@ -25,7 +25,7 @@ client.on('ready', () => {
 
 client.on('message', msg => {
   console.log(msg);
-  if (!msg.guild) return;
+  if (!msg.guild || msg.channel.type !== 'dm' ) return;
 
   if (isBotMention(client, msg)) {
     replyWithUsage(msg);
