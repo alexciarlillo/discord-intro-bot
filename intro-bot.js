@@ -69,6 +69,7 @@ client.on('message', msg => {
 
     ytdl.getInfo(url)
         .then((info) => {
+          console.log(info);
             if (info.length_seconds > 600) {
                 throw new Error("Source too long (max 10 minutes).");
             }
