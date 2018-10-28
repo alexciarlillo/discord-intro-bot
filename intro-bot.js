@@ -69,18 +69,18 @@ client.on('message', msg => {
 
     ytdl.getInfo(url)
         .then((info) => {
-          console.log(info);
             if (info.length_seconds > 600) {
                 throw new Error("Source too long (max 10 minutes).");
             }
-        }).then( () => {
+            resolve(info);
+        }).then((info) => {
            let stream = ytdl(url, { filter: (format) => format.container === 'm4a' })
                         .pipe(fs.createWriteStream(authorName + '.m4a'));
         
            stream.on('finish', () => {
                 setUserIntro(authorName, {url: url, seek: seek, duration: duration})
                 .then( () => {
-                    msg.reply(`**Intro music set!** Source: ${url} | Offset: ${seek}s | Duration: ${duration}s`);
+                    msg.reply(`**Intro music set!** Source: ${info.title} | Offset: ${seek}s | Duration: ${duration}s`);
                 });
            });
         }).catch(err => {
