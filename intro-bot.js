@@ -24,6 +24,7 @@ client.on('ready', () => {
 });
 
 client.on('message', msg => {
+  console.log(msg);
   if (!msg.guild) return;
 
   if (isBotMention(client, msg)) {
@@ -76,7 +77,7 @@ client.on('message', msg => {
             return info;
         }).then((info) => {
            msg.reply(`**Setting into music - downloading source - please wait...**`);
-           
+
            let stream = ytdl(url, { filter: (format) => format.container === 'm4a' })
                         .pipe(fs.createWriteStream(authorName + '.m4a'));
         
